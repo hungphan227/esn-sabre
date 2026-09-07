@@ -240,10 +240,6 @@ class AMQPSchedulePlugin extends Plugin {
         // attendees never learnt about a booking that got turned down.
         $restrictToBooker = $this->shouldRestrictSchedulingToBooker($vCal);
 
-        if ($this->shouldEnableEmailValarmRecipientScheduling() && $this->ensureValarmUids($vCal)) {
-            $modified = true;
-        }
-
         $isTeamCalendar = $this->isTeamCalendarPath($calendarPath);
         $actorAddresses = $this->fetchSchedulingAddresses($calendarPath, $isTeamCalendar);
         $organizerAddress = $this->extractSingleOrganizerAddress($vCal);
@@ -257,6 +253,9 @@ class AMQPSchedulePlugin extends Plugin {
             $this->currentOldMessage = $node->get();
             $oldObj = Reader::read($this->currentOldMessage);
         }
+
+        $isAttendeeCalendarWrite = $this->isAttendeeCalendarWrite($oldObj ?? $vCal, $isTeamCalendar, $actorAddresses);
+        $this->ensureManagedEmailValarmUids($vCal, $isAttendeeCalendarWrite, $modified);
 
         if ($oldObj && $this->shouldValidateAttendeeSchedulingObjectChange($request->getPath(), $isTeamCalendar)) {
             $this->assertAllowedAttendeeSchedulingObjectChange($oldObj, $vCal, $actorAddresses);
