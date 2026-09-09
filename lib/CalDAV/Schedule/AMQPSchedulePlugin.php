@@ -139,13 +139,31 @@ class AMQPSchedulePlugin extends Plugin {
                 'hasChange'  => $iTipMessage->hasChange,
                 'recipients' => [],
             ];
+        } elseif ($iTipMessage->method === 'REPLY') {
+            // The broker emits one REPLY per changed occurrence. Keep them in one
+            // delivery so replies for overrides are not discarded behind the master.
+            $this->pendingDeliveries[$key]['message'] = $this->mergeReplyOccurrences($this->pendingDeliveries[$key]['message'], $iTipMessage);
+            $this->pendingDeliveries[$key]['hasChange'] = $this->pendingDeliveries[$key]['hasChange'] || $iTipMessage->hasChange;
         }
 
-        $this->pendingDeliveries[$key]['recipients'][] = $iTipMessage->recipient;
+        if (!in_array($iTipMessage->recipient, $this->pendingDeliveries[$key]['recipients'], true)) {
+            $this->pendingDeliveries[$key]['recipients'][] = $iTipMessage->recipient;
+        }
 
         // Exact '1.0' (no description text) — short-circuits EventRealTimePlugin.schedule()
         // which checks scheduleStatus with a strict string comparison against the constant.
         $iTipMessage->scheduleStatus = '1.0';
+    }
+
+    private function mergeReplyOccurrences(string $pendingReply, ITip\Message $iTipMessage): string {
+        // Each broker REPLY already contains all VTIMEZONEs from the same source calendar.
+        $reply = Reader::read($pendingReply);
+        foreach ($iTipMessage->message->select('VEVENT') as $event) {
+            $reply->add(clone $event);
+        }
+        $result = $reply->serialize();
+        $reply->destroy();
+        return $result;
     }
 
     private function assertCanAccessItipRequestPath(RequestInterface $request): void {
